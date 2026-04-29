@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Instagram DM Automation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <style>
+    :root { --ig: linear-gradient(135deg,#833ab4 0%,#fd1d1d 50%,#fcb045 100%); }
+    .ig-bg   { background: var(--ig); }
+    .ig-text { background: var(--ig); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .reel-card { transition: transform .18s ease, box-shadow .18s ease; }
+    .reel-card:hover { transform: translateY(-4px); box-shadow: 0 16px 32px rgba(0,0,0,.18); }
+    .reel-card.selected { outline: 3px solid #833ab4; outline-offset: 2px; }
+    .spinner { border: 3px solid #e5e7eb; border-top-color: #833ab4; border-radius: 50%;
+               width: 28px; height: 28px; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .toast { animation: toastIn .3s ease; }
+    @keyframes toastIn { from { transform:translateX(110%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+    .badge { display:inline-block; font-size:.6rem; padding:2px 8px; border-radius:9999px;
+             font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+    .tab-active { background:#fff; box-shadow:0 1px 6px rgba(0,0,0,.1); color:#7c3aed; }
+    .modal-bg { backdrop-filter: blur(2px); }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans">
+
+<!-- ── TOAST CONTAINER ─────────────────────────────────────── -->
+<div id="toasts" class="fixed top-4 right-4 z-[999] flex flex-col gap-2 w-80"></div>
+
+<!-- ── HEADER ───────────────────────────────────────────────── -->
+<header class="ig-bg text-white shadow-lg">
+  <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <i class="fab fa-instagram text-3xl"></i>
+      <div>
+        <h1 class="font-bold text-lg leading-tight">DM Automation</h1>
+        <p class="text-white/70 text-xs">Comment → Auto DM</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <div class="text-right">
+        <div id="pName" class="text-sm font-semibold">Loading…</div>
+        <div id="pUser" class="text-xs text-white/60">@—</div>
+      </div>
+      <div class="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center">
+        <i class="fas fa-user text-sm"></i>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ── STATS BAR ─────────────────────────────────────────────── -->
+<div class="bg-white border-b shadow-sm">
+  <div class="max-w-7xl mx-auto px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+    <div><div id="sDMs"    class="text-2xl font-bold text-purple-600">—</div><div class="text-[11px] text-gray-400 uppercase tracking-wide">DMs Sent</div></div>
+    <div><div id="sLinks"  class="text-2xl font-bold text-green-500">—</div><div class="text-[11px] text-gray-400 uppercase tracking-wide">Links Delivered</div></div>
+    <div><div id="sPend"   class="text-2xl font-bold text-amber-500">—</div><div class="text-[11px] text-gray-400 uppercase tracking-wide">Awaiting Follow</div></div>
+    <div><div id="sRules"  class="text-2xl font-bold text-blue-500">—</div><div class="text-[11px] text-gray-400 uppercase tracking-wide">Active Rules</div></div>
+  </div>
+</div>
+
+<!-- ── MAIN ──────────────────────────────────────────────────── -->
+<main class="max-w-7xl mx-auto px-4 py-6">
+
+  <!-- Tabs -->
+  <div class="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-6">
+    <button onclick="tab('reels')" id="t-reels" class="tab-active tab px-5 py-2 rounded-lg text-sm font-medium transition-all">
+      <i class="fas fa-film mr-1.5"></i>Reels &amp; Rules
+    </button>
+    <button onclick="tab('logs')" id="t-logs" class="tab px-5 py-2 rounded-lg text-sm font-medium text-gray-500 transition-all hover:text-purple-600">
+      <i class="fas fa-list mr-1.5"></i>Activity
+    </button>
+    <button onclick="tab('setup')" id="t-setup" class="tab px-5 py-2 rounded-lg text-sm font-medium text-gray-500 transition-all hover:text-purple-600">
+      <i class="fas fa-cog mr-1.5"></i>Webhook Setup
+    </button>
+  </div>
+
+  <!-- ════ REELS TAB ════════════════════════════════════════════ -->
+  <div id="pg-reels">
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+      <!-- Left: Reels grid -->
+      <div class="lg:col-span-3">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold text-gray-800">Your Reels</h2>
+          <button onclick="loadReels()" class="text-sm text-purple-600 hover:text-purple-800 flex items-center gap-1">
+            <i class="fas fa-rotate-right text-xs"></i> Refresh
+          </button>
+        </div>
+        <div id="reelsGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3 min-h-40">
+          <div class="col-span-3 flex justify-center items-center py-16">
+            <div class="spinner"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Rules for selected reel -->
+      <div class="lg:col-span-2">
+        <!-- Placeholder (no reel selected) -->
+        <div id="rulesPlaceholder" class="bg-white border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center">
+          <i class="fab fa-instagram text-4xl text-gray-200 mb-3 block"></i>
+          <p class="text-gray-400 text-sm">Select a reel to manage keyword automation</p>
+        </div>
+
+        <!-- Rules panel (shown after selection) -->
+        <div id="rulesPanel" class="hidden bg-white rounded-2xl border shadow-sm overflow-hidden">
+          <div class="p-4 bg-gray-50 border-b flex items-center justify-between">
+            <div>
+              <p class="font-semibold text-sm text-gray-800 truncate max-w-[180px]" id="rCaption">Reel</p>
+              <p class="text-[11px] text-gray-400 mt-0.5" id="rId">—</p>
+            </div>
+            <button onclick="openModal()"
+              class="ig-bg text-white text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 hover:opacity-90">
+              <i class="fas fa-plus text-xs"></i> Add Rule
+            </button>
+          </div>
+          <div id="rulesList" class="divide-y min-h-[80px]">
+            <div class="p-8 text-center text-gray-400 text-sm">
+              <i class="fas fa-wand-magic-sparkles text-2xl text-gray-200 mb-2 block"></i>
+              No rules yet — add your first!
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- All rules table -->
+    <div class="mt-6 bg-white rounded-2xl border shadow-sm overflow-hidden">
+      <div class="p-4 bg-gray-50 border-b">
+        <h3 class="font-semibold text-gray-800 text-sm">All Automation Rules</h3>
+      </div>
+      <div id="allRules" class="divide-y text-sm">
+        <div class="p-6 text-center text-gray-400">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ LOGS TAB ════════════════════════════════════════════ -->
+  <div id="pg-logs" class="hidden">
+    <div class="bg-white rounded-2xl border shadow-sm overflow-hidden">
+      <div class="p-4 bg-gray-50 border-b flex items-center justify-between">
+        <h2 class="font-semibold text-gray-800">Activity Log</h2>
+        <button onclick="loadLogs()" class="text-sm text-purple-600 hover:text-purple-800">
+          <i class="fas fa-rotate-right text-xs mr-1"></i>Refresh
+        </button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-gray-400 text-[11px] uppercase tracking-wider">
+            <tr>
+              <th class="px-4 py-3 text-left">User</th>
+              <th class="px-4 py-3 text-left">Comment</th>
+              <th class="px-4 py-3 text-left">Keyword</th>
+              <th class="px-4 py-3 text-left">Status</th>
+              <th class="px-4 py-3 text-left">Time</th>
+            </tr>
+          </thead>
+          <tbody id="logsBody" class="divide-y divide-gray-50">
+            <tr><td colspan="5" class="py-12 text-center text-gray-400">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="p-4 border-t flex items-center justify-between text-xs text-gray-500">
+        <span id="logCount">0 entries</span>
+        <div class="flex gap-2">
+          <button id="btnPrev" onclick="prevPage()"
+            class="px-3 py-1 border rounded text-xs disabled:opacity-30 hover:bg-gray-50" disabled>← Prev</button>
+          <button id="btnNext" onclick="nextPage()"
+            class="px-3 py-1 border rounded text-xs disabled:opacity-30 hover:bg-gray-50" disabled>Next →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ SETUP TAB ════════════════════════════════════════════ -->
+  <div id="pg-setup" class="hidden">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- Webhook config -->
+      <div class="bg-white rounded-2xl border shadow-sm p-6">
+        <h3 class="font-semibold text-gray-800 mb-1">📡 Webhook Configuration</h3>
+        <p class="text-sm text-gray-500 mb-5">Connect Meta to receive real-time comment events</p>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
+              Your Public URL
+            </label>
+            <div class="flex gap-2">
+              <input id="wUrl" type="text" placeholder="https://xxxx.ngrok.io"
+                class="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"/>
+              <button onclick="doSubscribe()"
+                class="ig-bg text-white px-4 py-2 rounded-xl text-sm hover:opacity-90 whitespace-nowrap">
+                Subscribe
+              </button>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-1.5">
+              We'll append <code class="bg-gray-100 px-1 rounded">/webhook</code> automatically
+            </p>
+          </div>
+          <div class="mt-3">
+            <button onclick="doSubscribePage()"
+              class="w-full border border-purple-300 text-purple-600 text-sm py-2 rounded-xl hover:bg-purple-50">
+              <i class="fas fa-plug mr-2"></i>Also subscribe this account to webhook events
+            </button>
+          </div>
+
+          <div class="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+            <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Your credentials</p>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Verify Token</span>
+              <code class="text-purple-600 text-xs bg-purple-50 px-2 py-0.5 rounded">insta_webhook_secret_2024</code>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Webhook path</span>
+              <code class="text-purple-600 text-xs bg-purple-50 px-2 py-0.5 rounded">/webhook</code>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-500">Subscribe fields</span>
+              <code class="text-purple-600 text-xs bg-purple-50 px-2 py-0.5 rounded">comments, messages</code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- How it works -->
+      <div class="bg-white rounded-2xl border shadow-sm p-6">
+        <h3 class="font-semibold text-gray-800 mb-4">🔄 How It Works</h3>
+        <div class="space-y-5">
+          <div class="flex gap-3">
+            <div class="ig-bg w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">1</div>
+            <div><p class="text-sm font-medium text-gray-700">Someone comments with your keyword</p>
+              <p class="text-xs text-gray-400">e.g. "link", "send me", "chahiye"</p></div>
+          </div>
+          <div class="flex gap-3">
+            <div class="ig-bg w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">2</div>
+            <div><p class="text-sm font-medium text-gray-700">Webhook fires → server detects it instantly</p>
+              <p class="text-xs text-gray-400">Real-time, no polling needed</p></div>
+          </div>
+          <div class="flex gap-3">
+            <div class="ig-bg w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">3</div>
+            <div><p class="text-sm font-medium text-gray-700">Initial DM sent automatically</p>
+              <p class="text-xs text-gray-400">"Follow me to get the link 🔥"</p></div>
+          </div>
+          <div class="flex gap-3">
+            <div class="ig-bg w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">4</div>
+            <div><p class="text-sm font-medium text-gray-700">User follows you &amp; replies "done"</p>
+              <p class="text-xs text-gray-400">Any confirmation word works (done, followed, yes…)</p></div>
+          </div>
+          <div class="flex gap-3">
+            <div class="ig-bg w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">5</div>
+            <div><p class="text-sm font-medium text-gray-700">Link delivered in DMs ✅</p>
+              <p class="text-xs text-gray-400">Logged in Activity tab with full status tracking</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Test DM -->
+      <div class="bg-white rounded-2xl border shadow-sm p-6">
+        <h3 class="font-semibold text-gray-800 mb-1">🧪 Test DM</h3>
+        <p class="text-sm text-gray-500 mb-4">Verify your DM sending works before going live</p>
+        <div class="space-y-3">
+          <input id="tUID" type="text" placeholder="Recipient Instagram User ID (IGSID)"
+            class="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"/>
+          <textarea id="tMsg" rows="3" placeholder="Hello! This is a test message 👋"
+            class="w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"></textarea>
+          <button onclick="testDM()"
+            class="ig-bg text-white w-full py-2.5 rounded-xl text-sm hover:opacity-90">
+            <i class="fas fa-paper-plane mr-2"></i>Send Test DM
+          </button>
+        </div>
+      </div>
+
+      <!-- ngrok guide -->
+      <div class="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-100 rounded-2xl p-6">
+        <h3 class="font-semibold text-gray-800 mb-2">🌐 Expose Locally with ngrok</h3>
+        <p class="text-sm text-gray-600 mb-3">Your server needs a public URL for webhooks. ngrok tunnels localhost in seconds.</p>
+        <div class="bg-gray-900 text-green-400 rounded-xl p-4 font-mono text-xs space-y-1 leading-relaxed">
+          <p class="text-gray-500"># 1. Install ngrok</p>
+          <p class="text-white">npm install -g ngrok</p>
+          <p class="text-gray-500 mt-2"># 2. Run in a NEW terminal window</p>
+          <p class="text-white">ngrok http 3000</p>
+          <p class="text-gray-500 mt-2"># 3. Copy the https URL shown, paste above</p>
+        </div>
+        <p class="text-xs text-gray-400 mt-3">
+          For permanent hosting → deploy to <strong>Railway.app</strong> or <strong>Render.com</strong> (both free tier available).
+        </p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ════ RULE MODAL ════════════════════════════════════════════ -->
+<div id="modal" class="hidden fixed inset-0 bg-black/50 modal-bg z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+    <div class="p-5 border-b flex items-center justify-between">
+      <h3 class="font-semibold text-gray-800">Add Automation Rule</h3>
+      <button onclick="closeModal()" class="text-gray-400 hover:text-gray-700">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="p-5 space-y-4">
+
+      <div>
+        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+          Trigger Keywords <span class="text-red-400">*</span>
+        </label>
+        <input id="mKw" type="text" placeholder="link, send, resource, chahiye (comma separated)"
+          class="w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"/>
+        <p class="text-xs text-gray-400 mt-1">Any comment containing one of these triggers the DM.</p>
+      </div>
+
+      <div>
+        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+          Initial DM Message <span class="text-red-400">*</span>
+        </label>
+        <textarea id="mInit" rows="3" placeholder="Hey! 👋 To get the link, please follow me first, then reply 'done' here 🔥"
+          class="w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"></textarea>
+        <p class="text-xs text-gray-400 mt-1">Sent immediately when a keyword is detected.</p>
+      </div>
+
+      <div>
+        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+          Link DM Message <span class="text-red-400">*</span>
+        </label>
+        <textarea id="mLink" rows="3" placeholder="Thanks for following! 🎉 Here's your exclusive link: https://yourlink.com"
+          class="w-full border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 resize-none"></textarea>
+        <p class="text-xs text-gray-400 mt-1">Sent after they reply "done" confirming they followed you.</p>
+      </div>
+    </div>
+    <div class="p-5 border-t flex gap-3">
+      <button onclick="closeModal()"
+        class="flex-1 border rounded-xl py-2.5 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+      <button onclick="saveRule()"
+        class="flex-1 ig-bg text-white rounded-xl py-2.5 text-sm hover:opacity-90 font-medium">Save Rule</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+let selectedReel = null;
+let logPage      = 0;
+let logTotal     = 0;
+const PER_PAGE   = 20;
+
+// ══════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════
+(async function boot() {
+  await Promise.allSettled([loadProfile(), loadStats()]);
+  await loadReels();
+  await loadAllRules();
+  setInterval(loadStats, 30_000);
+})();
+
+// ══════════════════════════════════════════
+//  API HELPER
+// ══════════════════════════════════════════
+async function api(url, opts = {}) {
+  const r = await fetch(url, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+  return d;
+}
+
+// ══════════════════════════════════════════
+//  PROFILE
+// ══════════════════════════════════════════
+async function loadProfile() {
+  try {
+    const p = await api('/api/profile');
+    document.getElementById('pName').textContent = p.name || p.username || 'Connected';
+    document.getElementById('pUser').textContent = '@' + (p.username || '—');
+  } catch { /* silent */ }
+}
+
+// ══════════════════════════════════════════
+//  STATS
+// ══════════════════════════════════════════
+async function loadStats() {
+  try {
+    const s = await api('/api/stats');
+    document.getElementById('sDMs').textContent   = s.total_dms;
+    document.getElementById('sLinks').textContent = s.links_sent;
+    document.getElementById('sPend').textContent  = s.awaiting_follow;
+    document.getElementById('sRules').textContent = s.active_rules;
+  } catch { /* silent */ }
+}
+
+// ══════════════════════════════════════════
+//  REELS
+// ══════════════════════════════════════════
+async function loadReels() {
+  const grid = document.getElementById('reelsGrid');
+  grid.innerHTML = '<div class="col-span-3 flex justify-center items-center py-16"><div class="spinner"></div></div>';
+
+  try {
+    const reels = await api('/api/reels');
+    if (!reels.length) {
+      grid.innerHTML = '<div class="col-span-3 py-14 text-center text-gray-400"><i class="fas fa-film text-4xl text-gray-200 mb-3 block"></i>No reels found on your account</div>';
+      return;
+    }
+
+    grid.innerHTML = reels.map(r => `
+      <div id="rc-${r.id}" onclick='selectReel(${JSON.stringify(r).replace(/'/g,"&#39;")})'
+        class="reel-card relative cursor-pointer rounded-xl overflow-hidden bg-gray-100 border-2 border-transparent"
+        style="aspect-ratio:9/16">
+        <img src="${r.thumbnail_url || r.media_url || ''}" alt=""
+          onerror="this.style.display='none'"
+          class="w-full h-full object-cover"/>
+        <div class="absolute inset-0 bg-gradient-to-t from-black/75 via-black/0 to-black/0"></div>
+        <div class="absolute bottom-0 left-0 right-0 p-2">
+          <p class="text-white text-[11px] line-clamp-2 leading-tight">
+            ${r.caption ? r.caption.slice(0,70)+'…' : 'No caption'}
+          </p>
+          <div class="flex gap-2 mt-1 text-white/60 text-[10px]">
+            <span><i class="fas fa-heart mr-0.5"></i>${r.like_count || 0}</span>
+            <span><i class="fas fa-comment mr-0.5"></i>${r.comments_count || 0}</span>
+          </div>
+        </div>
+        <div class="absolute top-2 right-2 bg-black/40 rounded text-white text-[10px] px-1.5 py-0.5">
+          <i class="fas fa-play text-[9px]"></i>
+        </div>
+      </div>
+    `).join('');
+
+  } catch(e) {
+    grid.innerHTML = `<div class="col-span-3 py-14 text-center text-red-400"><i class="fas fa-circle-exclamation text-3xl mb-2 block"></i>${e.message}</div>`;
+  }
+}
+
+async function selectReel(reel) {
+  selectedReel = reel;
+
+  document.querySelectorAll('.reel-card').forEach(el => el.classList.remove('selected'));
+  const card = document.getElementById('rc-' + reel.id);
+  if (card) card.classList.add('selected');
+
+  document.getElementById('rulesPlaceholder').classList.add('hidden');
+  document.getElementById('rulesPanel').classList.remove('hidden');
+  document.getElementById('rCaption').textContent = reel.caption ? reel.caption.slice(0,50)+'…' : 'No caption';
+  document.getElementById('rId').textContent = 'ID: ' + reel.id;
+
+  await loadRulesFor(reel.id);
+}
+
+// ══════════════════════════════════════════
+//  RULES
+// ══════════════════════════════════════════
+async function loadRulesFor(mediaId) {
+  const el = document.getElementById('rulesList');
+  el.innerHTML = '<div class="p-6 text-center"><div class="spinner mx-auto"></div></div>';
+  try {
+    const rules = await api('/api/rules/media/' + mediaId);
+    el.innerHTML = rules.length
+      ? rules.map(ruleCard).join('')
+      : '<div class="p-8 text-center text-gray-400 text-sm"><i class="fas fa-wand-magic-sparkles text-2xl text-gray-200 mb-2 block"></i>No rules yet — add your first!</div>';
+  } catch(e) {
+    el.innerHTML = `<div class="p-4 text-center text-red-400 text-sm">${e.message}</div>`;
+  }
+}
+
+async function loadAllRules() {
+  const el = document.getElementById('allRules');
+  try {
+    const rules = await api('/api/rules');
+    if (!rules.length) {
+      el.innerHTML = '<div class="p-6 text-center text-gray-400 text-sm">No rules yet. Select a reel and add your first rule!</div>';
+      return;
+    }
+    el.innerHTML = rules.map(r => `
+      <div class="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap gap-1 mb-1">
+            ${r.keywords.split(',').map(k => `<span class="bg-purple-100 text-purple-700 text-[11px] px-2 py-0.5 rounded-full font-medium">${k.trim()}</span>`).join('')}
+          </div>
+          <p class="text-[11px] text-gray-400 truncate">Media: ${r.media_id} · ${new Date(r.created_at).toLocaleDateString()}</p>
+        </div>
+        <div class="flex items-center gap-3 ml-3 flex-shrink-0">
+          <div class="flex items-center gap-1 text-[11px] ${r.active ? 'text-green-500' : 'text-gray-400'}">
+            <div class="w-1.5 h-1.5 rounded-full ${r.active ? 'bg-green-500' : 'bg-gray-300'}"></div>
+            ${r.active ? 'Active' : 'Off'}
+          </div>
+          <button onclick="delRule(${r.id})" class="text-red-400 hover:text-red-600 text-xs">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="p-4 text-center text-red-400 text-sm">${e.message}</div>`;
+  }
+}
+
+function ruleCard(r) {
+  return `
+    <div class="p-4">
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap gap-1 mb-1.5">
+            ${r.keywords.split(',').map(k => `<span class="bg-purple-100 text-purple-700 text-[11px] px-2 py-0.5 rounded-full font-semibold">${k.trim()}</span>`).join('')}
+          </div>
+          <p class="text-xs text-gray-400 truncate">→ ${r.initial_message.slice(0,55)}…</p>
+        </div>
+        <button onclick="delRule(${r.id})" class="text-red-400 hover:text-red-600 text-xs flex-shrink-0">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// ── modal ──
+function openModal() {
+  if (!selectedReel) { toast('Select a reel first', 'err'); return; }
+  ['mKw','mInit','mLink'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('modal').classList.remove('hidden');
+}
+function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+
+async function saveRule() {
+  const kw   = document.getElementById('mKw').value.trim();
+  const init = document.getElementById('mInit').value.trim();
+  const link = document.getElementById('mLink').value.trim();
+  if (!kw || !init || !link) { toast('Fill all three fields', 'err'); return; }
+  try {
+    await api('/api/rules', {
+      method: 'POST',
+      body: JSON.stringify({
+        media_id:        selectedReel.id,
+        media_caption:   selectedReel.caption || '',
+        media_thumbnail: selectedReel.thumbnail_url || '',
+        keywords:        kw,
+        initial_message: init,
+        link_message:    link,
+      }),
+    });
+    closeModal();
+    toast('Rule saved ✅');
+    await loadRulesFor(selectedReel.id);
+    await loadAllRules();
+    await loadStats();
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function delRule(id) {
+  if (!confirm('Delete this rule?')) return;
+  try {
+    await api('/api/rules/' + id, { method: 'DELETE' });
+    toast('Rule deleted');
+    if (selectedReel) await loadRulesFor(selectedReel.id);
+    await loadAllRules();
+    await loadStats();
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════
+//  LOGS
+// ══════════════════════════════════════════
+async function loadLogs() {
+  const tbody = document.getElementById('logsBody');
+  tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-gray-400"><div class="spinner mx-auto"></div></td></tr>';
+  try {
+    const { logs, total } = await api(`/api/logs?limit=${PER_PAGE}&offset=${logPage * PER_PAGE}`);
+    logTotal = total;
+    document.getElementById('logCount').textContent = `${total} total entries`;
+    document.getElementById('btnPrev').disabled = logPage === 0;
+    document.getElementById('btnNext').disabled = (logPage + 1) * PER_PAGE >= total;
+
+    if (!logs.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="py-14 text-center text-gray-400"><i class="fas fa-inbox text-3xl text-gray-200 mb-2 block"></i>No activity yet</td></tr>';
+      return;
+    }
+
+    const statusMap = {
+      awaiting_follow: ['bg-amber-100 text-amber-700',   '⏳ Awaiting Follow'],
+      link_sent:       ['bg-green-100 text-green-700',   '✅ Link Sent'],
+      failed:          ['bg-red-100 text-red-700',       '❌ Failed'],
+      initial_dm_sent: ['bg-blue-100 text-blue-700',     '📨 DM Sent'],
+    };
+
+    tbody.innerHTML = logs.map(l => {
+      const [cls, label] = statusMap[l.status] || ['bg-gray-100 text-gray-600', l.status];
+      return `
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-3">
+            <div class="font-medium text-gray-800 text-sm">@${l.username}</div>
+            <div class="text-[11px] text-gray-400">${l.user_id}</div>
+          </td>
+          <td class="px-4 py-3 text-xs text-gray-500 max-w-[160px] truncate">${l.comment_text || '—'}</td>
+          <td class="px-4 py-3">
+            <span class="bg-purple-100 text-purple-700 text-[11px] px-2 py-0.5 rounded-full font-medium">${l.keyword_matched || '—'}</span>
+          </td>
+          <td class="px-4 py-3">
+            <span class="badge ${cls}">${label}</span>
+          </td>
+          <td class="px-4 py-3 text-[11px] text-gray-400 whitespace-nowrap">${new Date(l.created_at).toLocaleString()}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="5" class="py-8 text-center text-red-400">${e.message}</td></tr>`;
+  }
+}
+function prevPage() { if (logPage > 0) { logPage--; loadLogs(); } }
+function nextPage() { if ((logPage + 1) * PER_PAGE < logTotal) { logPage++; loadLogs(); } }
+
+// ══════════════════════════════════════════
+//  WEBHOOK / TEST
+// ══════════════════════════════════════════
+async function doSubscribe() {
+  const url = document.getElementById('wUrl').value.trim();
+  if (!url) { toast('Enter your public URL', 'err'); return; }
+  try {
+    await api('/api/subscribe-webhook', { method:'POST', body: JSON.stringify({ webhookUrl: url + '/webhook' }) });
+    toast('Webhook subscribed ✅');
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function doSubscribePage() {
+  try {
+    await api('/api/subscribe-page', { method:'POST' });
+    toast('Account subscribed to webhook events ✅');
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function testDM() {
+  const uid = document.getElementById('tUID').value.trim();
+  const msg = document.getElementById('tMsg').value.trim();
+  if (!uid || !msg) { toast('Fill both fields', 'err'); return; }
+  try {
+    await api('/api/test-dm', { method:'POST', body: JSON.stringify({ userId:uid, message:msg }) });
+    toast('Test DM sent ✅');
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ══════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════
+function tab(name) {
+  ['reels','logs','setup'].forEach(n => {
+    document.getElementById('pg-'+n).classList.toggle('hidden', n !== name);
+    const btn = document.getElementById('t-'+n);
+    if (n === name) { btn.classList.add('tab-active'); btn.classList.remove('text-gray-500'); }
+    else            { btn.classList.remove('tab-active'); btn.classList.add('text-gray-500'); }
+  });
+  if (name === 'logs') loadLogs();
+}
+
+// ══════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════
+function toast(msg, type = 'ok') {
+  const c  = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = `toast flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm text-white max-w-xs ${type === 'err' ? 'bg-red-500' : 'bg-gray-800'}`;
+  el.innerHTML = `<i class="fas ${type === 'err' ? 'fa-circle-exclamation' : 'fa-circle-check'}"></i><span>${msg}</span>`;
+  c.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+</script>
+</body>
+</html>
